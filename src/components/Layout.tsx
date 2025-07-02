@@ -61,9 +61,11 @@ const Layout = ({ children }: LayoutProps) => {
 
             {/* Desktop Login Button */}
             <div className="hidden md:flex items-center space-x-4">
-              <Button variant="outline" size="sm">
-                <User className="h-4 w-4 mr-2" />
-                Login
+              <Button asChild variant="outline" size="sm">
+                <Link to="/login">
+                  <User className="h-4 w-4 mr-2" />
+                  Login
+                </Link>
               </Button>
             </div>
 
@@ -103,9 +105,11 @@ const Layout = ({ children }: LayoutProps) => {
                 );
               })}
               <div className="pt-4 border-t">
-                <Button variant="outline" className="w-full justify-start">
-                  <User className="h-4 w-4 mr-2" />
-                  Login
+                <Button asChild variant="outline" className="w-full justify-start">
+                  <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                    <User className="h-4 w-4 mr-2" />
+                    Login
+                  </Link>
                 </Button>
               </div>
             </div>
