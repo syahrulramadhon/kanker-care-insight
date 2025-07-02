@@ -4,8 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback, AvatarInitials } from '@/components/ui/avatar';
-import { BarChart3, TrendingUp, Calendar, FileText, Alert, CheckCircle, Clock, User } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { BarChart3, TrendingUp, Calendar, FileText, AlertCircle, CheckCircle, Clock, User } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 const Dashboard = () => {
@@ -154,7 +154,7 @@ const Dashboard = () => {
                       <p className="text-2xl font-bold">3</p>
                       <Badge variant="outline" className="mt-1">Stabil</Badge>
                     </div>
-                    <Alert className="h-8 w-8 text-amber-500" />
+                    <AlertCircle className="h-8 w-8 text-amber-500" />
                   </div>
                 </CardContent>
               </Card>
@@ -320,7 +320,7 @@ const Dashboard = () => {
 
                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                     <div className="flex items-start space-x-3">
-                      <Alert className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
                       <div>
                         <p className="font-medium text-blue-800">Evaluasi Radiasi</p>
                         <p className="text-sm text-muted-foreground">
