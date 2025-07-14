@@ -9,19 +9,22 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, User, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { loginSchema, registerSchema, type LoginFormData, type RegisterFormData, sanitizeInput, RateLimiter } from '@/lib/validation';
+import { authStorage, sanitizeFormData } from '@/lib/security';
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
-  const [loginForm, setLoginForm] = useState({
+  const [loginForm, setLoginForm] = useState<LoginFormData>({
     email: '',
     password: '',
     rememberMe: false
   });
 
-  const [registerForm, setRegisterForm] = useState({
+  const [registerForm, setRegisterForm] = useState<RegisterFormData>({
     fullName: '',
     email: '',
     phone: '',
@@ -30,54 +33,151 @@ const Login = () => {
     agreeTerms: false
   });
 
+  // Rate limiters
+  const loginLimiter = new RateLimiter(5, 15 * 60 * 1000); // 5 attempts per 15 minutes
+  const registerLimiter = new RateLimiter(3, 60 * 60 * 1000); // 3 attempts per hour
+
+  const handleInputChange = (
+    field: string, 
+    value: string | boolean, 
+    formType: 'login' | 'register'
+  ) => {
+    const sanitizedValue = typeof value === 'string' ? sanitizeInput(value) : value;
+    
+    if (formType === 'login') {
+      setLoginForm(prev => ({ ...prev, [field]: sanitizedValue }));
+    } else {
+      setRegisterForm(prev => ({ ...prev, [field]: sanitizedValue }));
+    }
+    
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    
+    // Check rate limiting
+    if (!loginLimiter.isAllowed('login')) {
+      const remaining = Math.ceil(loginLimiter.getRemainingTime('login') / 1000 / 60);
+      toast({
+        title: "Terlalu banyak percobaan",
+        description: `Coba lagi dalam ${remaining} menit`,
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Simulasi proses login
-    setTimeout(() => {
+    setIsLoading(true);
+    setErrors({});
+
+    try {
+      // Sanitize and validate input
+      const sanitizedData = sanitizeFormData(loginForm);
+      const validationResult = loginSchema.safeParse(sanitizedData);
+
+      if (!validationResult.success) {
+        const fieldErrors: Record<string, string> = {};
+        validationResult.error.issues.forEach((issue) => {
+          if (issue.path[0]) {
+            fieldErrors[issue.path[0] as string] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
+        setIsLoading(false);
+        return;
+      }
+
+      // For real authentication, this would connect to Supabase
+      // Simulated login for now
+      setTimeout(() => {
+        setIsLoading(false);
+        
+        // Store authentication state securely
+        authStorage.setAuthToken('mock_token_' + Date.now());
+        authStorage.setUserData({
+          email: validationResult.data.email,
+          loginTime: new Date().toISOString()
+        });
+
+        toast({
+          title: "Login Berhasil",
+          description: "Selamat datang kembali di KankerCare",
+        });
+      }, 1500);
+    } catch (error) {
       setIsLoading(false);
       toast({
-        title: "Login Berhasil",
-        description: "Selamat datang kembali di KankerCare",
+        title: "Error",
+        description: "Terjadi kesalahan saat login. Silakan coba lagi.",
+        variant: "destructive",
       });
-      // Redirect ke dashboard atau halaman utama
-      console.log('Login success:', loginForm);
-    }, 1500);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (registerForm.password !== registerForm.confirmPassword) {
+    // Check rate limiting
+    if (!registerLimiter.isAllowed('register')) {
+      const remaining = Math.ceil(registerLimiter.getRemainingTime('register') / 1000 / 60);
       toast({
-        title: "Error",
-        description: "Password dan konfirmasi password tidak sama",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!registerForm.agreeTerms) {
-      toast({
-        title: "Error",
-        description: "Anda harus menyetujui syarat dan ketentuan",
+        title: "Terlalu banyak percobaan",
+        description: `Coba lagi dalam ${remaining} menit`,
         variant: "destructive",
       });
       return;
     }
 
     setIsLoading(true);
+    setErrors({});
 
-    // Simulasi proses registrasi
-    setTimeout(() => {
+    try {
+      // Sanitize and validate input
+      const sanitizedData = sanitizeFormData(registerForm);
+      const validationResult = registerSchema.safeParse(sanitizedData);
+
+      if (!validationResult.success) {
+        const fieldErrors: Record<string, string> = {};
+        validationResult.error.issues.forEach((issue) => {
+          if (issue.path[0]) {
+            fieldErrors[issue.path[0] as string] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
+        setIsLoading(false);
+        return;
+      }
+
+      // For real authentication, this would connect to Supabase
+      // Simulated registration for now
+      setTimeout(() => {
+        setIsLoading(false);
+        toast({
+          title: "Registrasi Berhasil",
+          description: "Akun Anda telah berhasil dibuat. Silakan login.",
+        });
+        
+        // Reset form
+        setRegisterForm({
+          fullName: '',
+          email: '',
+          phone: '',
+          password: '',
+          confirmPassword: '',
+          agreeTerms: false
+        });
+      }, 1500);
+    } catch (error) {
       setIsLoading(false);
       toast({
-        title: "Registrasi Berhasil",
-        description: "Akun Anda telah berhasil dibuat",
+        title: "Error",
+        description: "Terjadi kesalahan saat registrasi. Silakan coba lagi.",
+        variant: "destructive",
       });
-      console.log('Register success:', registerForm);
-    }, 1500);
+    }
   };
 
   return (
@@ -116,31 +216,32 @@ const Login = () => {
                     <Label htmlFor="email">Email</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="nama@email.com"
-                        className="pl-10"
-                        value={loginForm.email}
-                        onChange={(e) => setLoginForm({...loginForm, email: e.target.value})}
-                        required
-                      />
-                    </div>
-                  </div>
+                       <Input
+                         id="email"
+                         type="email"
+                         placeholder="nama@email.com"
+                         className={`pl-10 ${errors.email ? 'border-destructive' : ''}`}
+                         value={loginForm.email}
+                         onChange={(e) => handleInputChange('email', e.target.value, 'login')}
+                         required
+                       />
+                     </div>
+                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Masukkan password"
-                        className="pl-10 pr-10"
-                        value={loginForm.password}
-                        onChange={(e) => setLoginForm({...loginForm, password: e.target.value})}
-                        required
-                      />
+                       <Input
+                         id="password"
+                         type={showPassword ? "text" : "password"}
+                         placeholder="Masukkan password"
+                         className={`pl-10 pr-10 ${errors.password ? 'border-destructive' : ''}`}
+                         value={loginForm.password}
+                         onChange={(e) => handleInputChange('password', e.target.value, 'login')}
+                         required
+                       />
                       <Button
                         type="button"
                         variant="ghost"
@@ -149,9 +250,10 @@ const Login = () => {
                         onClick={() => setShowPassword(!showPassword)}
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
+                       </Button>
+                     </div>
+                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                   </div>
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
@@ -182,107 +284,115 @@ const Login = () => {
                     <Label htmlFor="fullName">Nama Lengkap</Label>
                     <div className="relative">
                       <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="fullName"
-                        type="text"
-                        placeholder="Nama lengkap Anda"
-                        className="pl-10"
-                        value={registerForm.fullName}
-                        onChange={(e) => setRegisterForm({...registerForm, fullName: e.target.value})}
-                        required
-                      />
-                    </div>
-                  </div>
+                       <Input
+                         id="fullName"
+                         type="text"
+                         placeholder="Nama lengkap Anda"
+                         className={`pl-10 ${errors.fullName ? 'border-destructive' : ''}`}
+                         value={registerForm.fullName}
+                         onChange={(e) => handleInputChange('fullName', e.target.value, 'register')}
+                         required
+                       />
+                     </div>
+                     {errors.fullName && <p className="text-sm text-destructive">{errors.fullName}</p>}
+                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="registerEmail">Email</Label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="registerEmail"
-                        type="email"
-                        placeholder="nama@email.com"
-                        className="pl-10"
-                        value={registerForm.email}
-                        onChange={(e) => setRegisterForm({...registerForm, email: e.target.value})}
-                        required
-                      />
-                    </div>
-                  </div>
+                       <Input
+                         id="registerEmail"
+                         type="email"
+                         placeholder="nama@email.com"
+                         className={`pl-10 ${errors.email ? 'border-destructive' : ''}`}
+                         value={registerForm.email}
+                         onChange={(e) => handleInputChange('email', e.target.value, 'register')}
+                         required
+                       />
+                     </div>
+                     {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="phone">Nomor Telepon</Label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="08xxxxxxxxxx"
-                        className="pl-10"
-                        value={registerForm.phone}
-                        onChange={(e) => setRegisterForm({...registerForm, phone: e.target.value})}
-                        required
-                      />
-                    </div>
-                  </div>
+                       <Input
+                         id="phone"
+                         type="tel"
+                         placeholder="08xxxxxxxxxx"
+                         className={`pl-10 ${errors.phone ? 'border-destructive' : ''}`}
+                         value={registerForm.phone}
+                         onChange={(e) => handleInputChange('phone', e.target.value, 'register')}
+                         required
+                       />
+                     </div>
+                     {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="registerPassword">Password</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="registerPassword"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Minimal 8 karakter"
-                        className="pl-10 pr-10"
-                        value={registerForm.password}
-                        onChange={(e) => setRegisterForm({...registerForm, password: e.target.value})}
-                        required
-                        minLength={8}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
+                       <Input
+                         id="registerPassword"
+                         type={showPassword ? "text" : "password"}
+                         placeholder="Minimal 8 karakter"
+                         className={`pl-10 pr-10 ${errors.password ? 'border-destructive' : ''}`}
+                         value={registerForm.password}
+                         onChange={(e) => handleInputChange('password', e.target.value, 'register')}
+                         required
+                         minLength={8}
+                       />
+                       <Button
+                         type="button"
+                         variant="ghost"
+                         size="sm"
+                         className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                         onClick={() => setShowPassword(!showPassword)}
+                       >
+                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                       </Button>
+                     </div>
+                     {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">Konfirmasi Password</Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="confirmPassword"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Ulangi password"
-                        className="pl-10"
-                        value={registerForm.confirmPassword}
-                        onChange={(e) => setRegisterForm({...registerForm, confirmPassword: e.target.value})}
-                        required
-                      />
-                    </div>
-                  </div>
+                       <Input
+                         id="confirmPassword"
+                         type={showPassword ? "text" : "password"}
+                         placeholder="Ulangi password"
+                         className={`pl-10 ${errors.confirmPassword ? 'border-destructive' : ''}`}
+                         value={registerForm.confirmPassword}
+                         onChange={(e) => handleInputChange('confirmPassword', e.target.value, 'register')}
+                         required
+                       />
+                     </div>
+                     {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword}</p>}
+                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="terms"
-                      checked={registerForm.agreeTerms}
-                      onCheckedChange={(checked) => 
-                        setRegisterForm({...registerForm, agreeTerms: checked as boolean})
-                      }
-                    />
-                    <Label htmlFor="terms" className="text-sm">
-                      Saya setuju dengan{' '}
-                      <Link to="/terms" className="text-primary hover:underline">
-                        syarat dan ketentuan
-                      </Link>
-                    </Label>
-                  </div>
+                   <div className="space-y-2">
+                     <div className="flex items-center space-x-2">
+                       <Checkbox
+                         id="terms"
+                         checked={registerForm.agreeTerms}
+                         onCheckedChange={(checked) => 
+                           handleInputChange('agreeTerms', checked as boolean, 'register')
+                         }
+                       />
+                       <Label htmlFor="terms" className="text-sm">
+                         Saya setuju dengan{' '}
+                         <Link to="/terms" className="text-primary hover:underline">
+                           syarat dan ketentuan
+                         </Link>
+                       </Label>
+                     </div>
+                     {errors.agreeTerms && <p className="text-sm text-destructive">{errors.agreeTerms}</p>}
+                   </div>
 
                   <Button type="submit" className="w-full" disabled={isLoading}>
                     {isLoading ? "Memproses..." : "Daftar Sekarang"}

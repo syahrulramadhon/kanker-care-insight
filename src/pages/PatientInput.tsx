@@ -11,9 +11,12 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, ArrowRight, Upload, User, FileText, Heart, CheckCircle } from 'lucide-react';
+import { patientInputSchema, validateFileUpload, sanitizeInput, type PatientInputData } from '@/lib/validation';
+import { sanitizeFormData } from '@/lib/security';
 
 const PatientInput = () => {
   const [currentStep, setCurrentStep] = useState(1);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     // Personal Data
     fullName: '',
@@ -28,7 +31,7 @@ const PatientInput = () => {
     diagnosisDate: '',
     
     // Symptoms
-    symptoms: [] as string[],
+    symptoms: [],
     otherSymptoms: '',
     
     // Medical History
@@ -45,7 +48,7 @@ const PatientInput = () => {
     },
     
     // Files
-    uploadedFiles: [] as File[]
+    uploadedFiles: []
   });
 
   const totalSteps = 4;
@@ -87,16 +90,143 @@ const PatientInput = () => {
     }));
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
+  const handleInputChange = (field: string, value: any) => {
+    const sanitizedValue = typeof value === 'string' ? sanitizeInput(value) : value;
+    
     setFormData(prev => ({
       ...prev,
-      uploadedFiles: [...prev.uploadedFiles, ...files]
+      [field]: sanitizedValue
     }));
+    
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const handleNestedInputChange = (parentField: string, field: string, value: string) => {
+    const sanitizedValue = sanitizeInput(value);
+    
+    setFormData(prev => ({
+      ...prev,
+      [parentField]: {
+        ...prev[parentField as keyof typeof prev] as any,
+        [field]: sanitizedValue
+      }
+    }));
+    
+    // Clear error when user starts typing
+    const errorKey = `${parentField}.${field}`;
+    if (errors[errorKey]) {
+      setErrors(prev => ({ ...prev, [errorKey]: '' }));
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    const validFiles: File[] = [];
+    
+    files.forEach(file => {
+      const validation = validateFileUpload(file);
+      if (validation.isValid) {
+        validFiles.push(file);
+      } else {
+        toast({
+          title: "File tidak valid",
+          description: `${file.name}: ${validation.error}`,
+          variant: "destructive",
+        });
+      }
+    });
+    
+    if (validFiles.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        uploadedFiles: [...prev.uploadedFiles, ...validFiles]
+      }));
+      
+      toast({
+        title: "File berhasil diupload",
+        description: `${validFiles.length} file berhasil ditambahkan`,
+      });
+    }
+  };
+
+  const validateCurrentStep = (): boolean => {
+    setErrors({});
+    
+    try {
+      // Sanitize data first
+      const sanitizedData = sanitizeFormData(formData);
+      
+      // Validate based on current step
+      if (currentStep === 1) {
+        // Validate personal data
+        const personalData = {
+          fullName: sanitizedData.fullName,
+          age: sanitizedData.age,
+          gender: sanitizedData.gender,
+          phone: sanitizedData.phone,
+          email: sanitizedData.email
+        };
+        
+        const result = patientInputSchema.pick({
+          fullName: true,
+          age: true,
+          gender: true,
+          phone: true,
+          email: true
+        }).safeParse(personalData);
+        
+        if (!result.success) {
+          const fieldErrors: Record<string, string> = {};
+          result.error.issues.forEach((issue) => {
+            if (issue.path[0]) {
+              fieldErrors[issue.path[0] as string] = issue.message;
+            }
+          });
+          setErrors(fieldErrors);
+          return false;
+        }
+      } else if (currentStep === 2) {
+        // Validate cancer details
+        const cancerData = {
+          cancerType: sanitizedData.cancerType,
+          stage: sanitizedData.stage,
+          diagnosisDate: sanitizedData.diagnosisDate
+        };
+        
+        const result = patientInputSchema.pick({
+          cancerType: true,
+          stage: true,
+          diagnosisDate: true
+        }).safeParse(cancerData);
+        
+        if (!result.success) {
+          const fieldErrors: Record<string, string> = {};
+          result.error.issues.forEach((issue) => {
+            if (issue.path[0]) {
+              fieldErrors[issue.path[0] as string] = issue.message;
+            }
+          });
+          setErrors(fieldErrors);
+          return false;
+        }
+      }
+      
+      return true;
+    } catch (error) {
+      toast({
+        title: "Error validasi",
+        description: "Terjadi kesalahan saat memvalidasi data",
+        variant: "destructive",
+      });
+      return false;
+    }
   };
 
   const handleNext = () => {
-    if (currentStep < totalSteps) {
+    if (validateCurrentStep() && currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -108,23 +238,58 @@ const PatientInput = () => {
   };
 
   const handleSubmit = () => {
-    // Here you would typically send the data to your backend
-    console.log('Form Data:', formData);
-    toast({
-      title: "Data berhasil disimpan!",
-      description: "Informasi pasien telah tersimpan dengan aman. Tim medis akan menghubungi Anda segera.",
-    });
+    setErrors({});
     
-    // Reset form or redirect
-    setCurrentStep(1);
-    setFormData({
-      fullName: '', age: '', gender: '', phone: '', email: '',
-      cancerType: '', stage: '', diagnosisDate: '',
-      symptoms: [], otherSymptoms: '',
-      familyHistory: '', allergies: '', previousTreatment: '',
-      labResults: { ca125: '', psa: '', cea: '', other: '' },
-      uploadedFiles: []
-    });
+    try {
+      // Final validation of all data
+      const sanitizedData = sanitizeFormData(formData);
+      const validationResult = patientInputSchema.safeParse(sanitizedData);
+
+      if (!validationResult.success) {
+        const fieldErrors: Record<string, string> = {};
+        validationResult.error.issues.forEach((issue) => {
+          const path = issue.path.join('.');
+          fieldErrors[path] = issue.message;
+        });
+        setErrors(fieldErrors);
+        
+        toast({
+          title: "Data tidak valid",
+          description: "Silakan periksa kembali data yang Anda masukkan",
+          variant: "destructive",
+        });
+        
+        // Go back to first step with errors
+        setCurrentStep(1);
+        return;
+      }
+
+      // Here you would typically send the validated data to your backend
+      console.log('Validated Form Data:', validationResult.data);
+      
+      toast({
+        title: "Data berhasil disimpan!",
+        description: "Informasi pasien telah tersimpan dengan aman. Tim medis akan menghubungi Anda segera.",
+      });
+      
+      // Reset form
+      setCurrentStep(1);
+      setFormData({
+        fullName: '', age: '', gender: '' as any, phone: '', email: '',
+        cancerType: '', stage: '', diagnosisDate: '',
+        symptoms: [], otherSymptoms: '',
+        familyHistory: '', allergies: '', previousTreatment: '',
+        labResults: { ca125: '', psa: '', cea: '', other: '' },
+        uploadedFiles: []
+      });
+      setErrors({});
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Terjadi kesalahan saat menyimpan data. Silakan coba lagi.",
+        variant: "destructive",
+      });
+    }
   };
 
   const renderStep = () => {
@@ -145,31 +310,35 @@ const PatientInput = () => {
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="fullName">Nama Lengkap *</Label>
-                  <Input
-                    id="fullName"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, fullName: e.target.value }))}
-                    placeholder="Masukkan nama lengkap"
-                    required
-                  />
+                   <Input
+                     id="fullName"
+                     value={formData.fullName}
+                     onChange={(e) => handleInputChange('fullName', e.target.value)}
+                     placeholder="Masukkan nama lengkap"
+                     className={errors.fullName ? 'border-destructive' : ''}
+                     required
+                   />
+                   {errors.fullName && <p className="text-sm text-destructive">{errors.fullName}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="age">Usia *</Label>
-                  <Input
-                    id="age"
-                    type="number"
-                    value={formData.age}
-                    onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
-                    placeholder="Masukkan usia"
-                    required
-                  />
+                   <Input
+                     id="age"
+                     type="number"
+                     value={formData.age}
+                     onChange={(e) => handleInputChange('age', e.target.value)}
+                     placeholder="Masukkan usia"
+                     className={errors.age ? 'border-destructive' : ''}
+                     required
+                   />
+                   {errors.age && <p className="text-sm text-destructive">{errors.age}</p>}
                 </div>
               </div>
               
               <div className="space-y-2">
                 <Label>Jenis Kelamin *</Label>
-                <Select value={formData.gender} onValueChange={(value) => setFormData(prev => ({ ...prev, gender: value }))}>
-                  <SelectTrigger>
+                <Select value={formData.gender} onValueChange={(value) => handleInputChange('gender', value)}>
+                  <SelectTrigger className={errors.gender ? 'border-destructive' : ''}>
                     <SelectValue placeholder="Pilih jenis kelamin" />
                   </SelectTrigger>
                   <SelectContent>
@@ -177,18 +346,21 @@ const PatientInput = () => {
                     <SelectItem value="perempuan">Perempuan</SelectItem>
                   </SelectContent>
                 </Select>
+                {errors.gender && <p className="text-sm text-destructive">{errors.gender}</p>}
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="phone">No. Telepon *</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                    placeholder="08xxxxxxxxxx"
-                    required
-                  />
+                   <Input
+                     id="phone"
+                     value={formData.phone}
+                     onChange={(e) => handleInputChange('phone', e.target.value)}
+                     placeholder="08xxxxxxxxxx"
+                     className={errors.phone ? 'border-destructive' : ''}
+                     required
+                   />
+                   {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
