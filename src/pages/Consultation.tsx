@@ -14,6 +14,8 @@ import { Calendar as CalendarIcon, Clock, MapPin, Phone, Mail, Star, Send, Check
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { ref, push, set } from 'firebase/database'; // pastikan 'set' diimpor!
+import { db } from '@/lib/firebase'; // path ini harus sesuai
 
 const Consultation = () => {
   const [selectedDate, setSelectedDate] = useState<Date>();
@@ -93,38 +95,50 @@ const Consultation = () => {
   const selectedDoctorData = doctors.find(d => d.id === selectedDoctor);
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!selectedDate || !selectedTime || !selectedDoctor) {
+  e.preventDefault();
+
+  if (!selectedDate || !selectedTime || !selectedDoctor) {
+    toast({
+      title: "Data belum lengkap",
+      description: "Mohon pilih tanggal, waktu, dan dokter konsultasi.",
+      variant: "destructive"
+    });
+    return;
+  }
+
+  // Simpan ke Firebase
+  const newConsultRef = push(ref(db, 'konsultasi'));
+
+    set(newConsultRef, {
+      ...formData,
+      doctor: selectedDoctor,
+      date: selectedDate.toISOString(),
+      time: selectedTime,
+      createdAt: new Date().toISOString()
+    })
+    .then(() => {
       toast({
-        title: "Data belum lengkap",
-        description: "Mohon pilih tanggal, waktu, dan dokter konsultasi.",
+        title: "Konsultasi berhasil dikirim!",
+        description: `Konsultasi dengan ${selectedDoctorData?.name} pada ${format(selectedDate, 'dd MMMM yyyy', { locale: id })} pukul ${selectedTime}.`,
+      });
+
+      // Reset form
+      setFormData({
+        name: '', email: '', phone: '', consultationType: '', complaint: '', urgency: 'normal'
+      });
+      setSelectedDate(undefined);
+      setSelectedTime('');
+      setSelectedDoctor('');
+    })
+    .catch((err) => {
+      toast({
+        title: "Gagal mengirim data",
+        description: err.message,
         variant: "destructive"
       });
-      return;
-    }
-
-    // Here you would typically send the data to your backend
-    console.log('Consultation Data:', {
-      ...formData,
-      date: selectedDate,
-      time: selectedTime,
-      doctor: selectedDoctor
     });
+};
 
-    toast({
-      title: "Konsultasi berhasil dijadwalkan!",
-      description: `Konsultasi dengan ${selectedDoctorData?.name} pada ${format(selectedDate, 'dd MMMM yyyy', { locale: id })} pukul ${selectedTime}.`,
-    });
-
-    // Reset form
-    setFormData({
-      name: '', email: '', phone: '', consultationType: '', complaint: '', urgency: 'normal'
-    });
-    setSelectedDate(undefined);
-    setSelectedTime('');
-    setSelectedDoctor('');
-  };
 
   return (
     <div className="min-h-screen py-12">

@@ -11,8 +11,13 @@ import { Eye, EyeOff, Mail, Lock, User, Phone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { loginSchema, registerSchema, type LoginFormData, type RegisterFormData, sanitizeInput, RateLimiter } from '@/lib/validation';
 import { authStorage, sanitizeFormData } from '@/lib/security';
+import { auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { useNavigate } from "react-router-dom";
+
 
 const Login = () => {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -57,128 +62,140 @@ const Login = () => {
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Check rate limiting
-    if (!loginLimiter.isAllowed('login')) {
-      const remaining = Math.ceil(loginLimiter.getRemainingTime('login') / 1000 / 60);
-      toast({
-        title: "Terlalu banyak percobaan",
-        description: `Coba lagi dalam ${remaining} menit`,
-        variant: "destructive",
+  e.preventDefault();
+
+  if (!loginLimiter.isAllowed("login")) {
+    const remaining = Math.ceil(loginLimiter.getRemainingTime("login") / 1000 / 60);
+    toast({
+      title: "Terlalu banyak percobaan",
+      description: `Coba lagi dalam ${remaining} menit`,
+      variant: "destructive",
+    });
+    return;
+  }
+
+  setIsLoading(true);
+  setErrors({});
+
+  try {
+    const sanitizedData = sanitizeFormData(loginForm);
+    const validationResult = loginSchema.safeParse(sanitizedData);
+
+    if (!validationResult.success) {
+      const fieldErrors: Record<string, string> = {};
+      validationResult.error.issues.forEach((issue) => {
+        if (issue.path[0]) {
+          fieldErrors[issue.path[0] as string] = issue.message;
+        }
       });
+      setErrors(fieldErrors);
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    setErrors({});
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      validationResult.data.email,
+      validationResult.data.password
+    );
 
-    try {
-      // Sanitize and validate input
-      const sanitizedData = sanitizeFormData(loginForm);
-      const validationResult = loginSchema.safeParse(sanitizedData);
+    const user = userCredential.user;
+    const token = await user.getIdToken();
 
-      if (!validationResult.success) {
-        const fieldErrors: Record<string, string> = {};
-        validationResult.error.issues.forEach((issue) => {
-          if (issue.path[0]) {
-            fieldErrors[issue.path[0] as string] = issue.message;
-          }
-        });
-        setErrors(fieldErrors);
-        setIsLoading(false);
-        return;
-      }
+    authStorage.setAuthToken(token);
+    authStorage.setUserData({
+      email: user.email,
+      uid: user.uid,
+      loginTime: new Date().toISOString(),
+    });
 
-      // For real authentication, this would connect to Supabase
-      // Simulated login for now
-      setTimeout(() => {
-        setIsLoading(false);
-        
-        // Store authentication state securely
-        authStorage.setAuthToken('mock_token_' + Date.now());
-        authStorage.setUserData({
-          email: validationResult.data.email,
-          loginTime: new Date().toISOString()
-        });
+    toast({
+      title: "Login Berhasil",
+      description: `Selamat datang kembali, ${user.email}`,
+    });
 
-        toast({
-          title: "Login Berhasil",
-          description: "Selamat datang kembali di KankerCare",
-        });
-      }, 1500);
-    } catch (error) {
-      setIsLoading(false);
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat login. Silakan coba lagi.",
-        variant: "destructive",
-      });
-    }
-  };
+    // ✅ Navigasi ke dashboard
+    navigate("/dashboard");
+  } catch (error) {
+    const err = error as Error;
+    toast({
+      title: "Login Gagal",
+      description: err.message || "Terjadi kesalahan saat login.",
+      variant: "destructive",
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Check rate limiting
-    if (!registerLimiter.isAllowed('register')) {
-      const remaining = Math.ceil(registerLimiter.getRemainingTime('register') / 1000 / 60);
-      toast({
-        title: "Terlalu banyak percobaan",
-        description: `Coba lagi dalam ${remaining} menit`,
-        variant: "destructive",
+  e.preventDefault();
+
+  if (!registerLimiter.isAllowed('register')) {
+    const remaining = Math.ceil(registerLimiter.getRemainingTime('register') / 1000 / 60);
+    toast({
+      title: "Terlalu banyak percobaan",
+      description: `Coba lagi dalam ${remaining} menit`,
+      variant: "destructive",
+    });
+    return;
+  }
+
+  setIsLoading(true);
+  setErrors({});
+
+  try {
+    const sanitizedData = sanitizeFormData(registerForm);
+    const validationResult = registerSchema.safeParse(sanitizedData);
+
+    if (!validationResult.success) {
+      const fieldErrors: Record<string, string> = {};
+      validationResult.error.issues.forEach((issue) => {
+        if (issue.path[0]) {
+          fieldErrors[issue.path[0] as string] = issue.message;
+        }
       });
+      setErrors(fieldErrors);
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    setErrors({});
+    const userCredential = await createUserWithEmailAndPassword(
+      auth,
+      validationResult.data.email,
+      validationResult.data.password
+    );
 
-    try {
-      // Sanitize and validate input
-      const sanitizedData = sanitizeFormData(registerForm);
-      const validationResult = registerSchema.safeParse(sanitizedData);
+    const user = userCredential.user;
 
-      if (!validationResult.success) {
-        const fieldErrors: Record<string, string> = {};
-        validationResult.error.issues.forEach((issue) => {
-          if (issue.path[0]) {
-            fieldErrors[issue.path[0] as string] = issue.message;
-          }
-        });
-        setErrors(fieldErrors);
-        setIsLoading(false);
-        return;
-      }
+    await updateProfile(user, {
+      displayName: validationResult.data.fullName
+    });
 
-      // For real authentication, this would connect to Supabase
-      // Simulated registration for now
-      setTimeout(() => {
-        setIsLoading(false);
-        toast({
-          title: "Registrasi Berhasil",
-          description: "Akun Anda telah berhasil dibuat. Silakan login.",
-        });
-        
-        // Reset form
-        setRegisterForm({
-          fullName: '',
-          email: '',
-          phone: '',
-          password: '',
-          confirmPassword: '',
-          agreeTerms: false
-        });
-      }, 1500);
-    } catch (error) {
-      setIsLoading(false);
-      toast({
-        title: "Error",
-        description: "Terjadi kesalahan saat registrasi. Silakan coba lagi.",
-        variant: "destructive",
-      });
-    }
-  };
+    toast({
+      title: "Registrasi Berhasil",
+      description: "Akun berhasil dibuat. Silakan login.",
+    });
+
+    setRegisterForm({
+      fullName: '',
+      email: '',
+      phone: '',
+      password: '',
+      confirmPassword: '',
+      agreeTerms: false
+    });
+
+  } catch (error) {
+  const err = error as Error;
+  toast({
+    title: "Login Gagal",
+    description: err.message || "Terjadi kesalahan saat login.",
+    variant: "destructive",
+  });
+}
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-medical-blue/10 via-background to-medical-pink/10 flex items-center justify-center p-4">

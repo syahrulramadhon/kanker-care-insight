@@ -13,6 +13,9 @@ import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, ArrowRight, Upload, User, FileText, Heart, CheckCircle } from 'lucide-react';
 import { patientInputSchema, validateFileUpload, sanitizeInput, type PatientInputData } from '@/lib/validation';
 import { sanitizeFormData } from '@/lib/security';
+import { getDatabase, ref, push, set } from 'firebase/database';
+import { app } from '@/lib/firebase';
+
 
 const PatientInput = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -266,7 +269,29 @@ const PatientInput = () => {
 
       // Here you would typically send the validated data to your backend
       console.log('Validated Form Data:', validationResult.data);
-      
+      const db = getDatabase(app);
+const pasienRef = ref(db, 'patients'); // folder `patients` di database
+const newPatientRef = push(pasienRef);
+
+set(newPatientRef, {
+  ...validationResult.data,
+  submittedAt: new Date().toISOString()
+})
+.then(() => {
+  toast({
+    title: "Data berhasil dikirim ke Firebase!",
+    description: "Informasi Anda telah disimpan dengan aman.",
+  });
+})
+.catch((error) => {
+  console.error("Firebase error:", error);
+  toast({
+    title: "Gagal mengirim data",
+    description: "Terjadi kesalahan saat menyimpan ke Firebase.",
+    variant: "destructive",
+  });
+});
+
       toast({
         title: "Data berhasil disimpan!",
         description: "Informasi pasien telah tersimpan dengan aman. Tim medis akan menghubungi Anda segera.",

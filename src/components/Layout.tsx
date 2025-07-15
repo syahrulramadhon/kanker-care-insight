@@ -1,9 +1,11 @@
-
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Menu, X, Home, Book, FileInput, BarChart3, Calendar, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+import { onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { auth } from '@/lib/firebase'; // Pastikan ini benar mengarah ke konfigurasi Firebase Auth
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,6 +14,16 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
+
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const navigation = [
     { name: 'Beranda', href: '/', icon: Home },
@@ -59,17 +71,26 @@ const Layout = ({ children }: LayoutProps) => {
               })}
             </nav>
 
-            {/* Desktop Login Button */}
+            {/* Desktop User Profile or Login */}
             <div className="hidden md:flex items-center space-x-4">
-              <Button asChild variant="outline" size="sm">
-                <Link to="/login">
-                  <User className="h-4 w-4 mr-2" />
-                  Login
-                </Link>
-              </Button>
+              {user ? (
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm">{user.displayName || user.email}</span>
+                  <Button variant="outline" size="sm" onClick={() => signOut(auth)}>
+                    Logout
+                  </Button>
+                </div>
+              ) : (
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/login">
+                    <User className="h-4 w-4 mr-2" />
+                    Login
+                  </Link>
+                </Button>
+              )}
             </div>
 
-            {/* Mobile menu button */}
+            {/* Mobile Menu Button */}
             <Button
               variant="ghost"
               size="sm"
@@ -105,12 +126,28 @@ const Layout = ({ children }: LayoutProps) => {
                 );
               })}
               <div className="pt-4 border-t">
-                <Button asChild variant="outline" className="w-full justify-start">
-                  <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                    <User className="h-4 w-4 mr-2" />
-                    Login
-                  </Link>
-                </Button>
+                {user ? (
+                  <div className="flex flex-col space-y-2">
+                    <span className="px-3 text-sm">{user.displayName || user.email}</span>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        signOut(auth);
+                        setIsMobileMenuOpen(false);
+                      }}
+                    >
+                      Logout
+                    </Button>
+                  </div>
+                ) : (
+                  <Button asChild variant="outline" className="w-full justify-start">
+                    <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
+                      <User className="h-4 w-4 mr-2" />
+                      Login
+                    </Link>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -118,9 +155,7 @@ const Layout = ({ children }: LayoutProps) => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1">
-        {children}
-      </main>
+      <main className="flex-1">{children}</main>
 
       {/* Footer */}
       <footer className="border-t bg-muted/50">
@@ -137,7 +172,7 @@ const Layout = ({ children }: LayoutProps) => {
                 Platform informasi dan monitoring kanker yang aman dan terpercaya.
               </p>
             </div>
-            
+
             <div>
               <h3 className="font-semibold mb-3">Navigasi</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -146,7 +181,7 @@ const Layout = ({ children }: LayoutProps) => {
                 <li><Link to="/patient-input" className="hover:text-foreground">Input Data</Link></li>
               </ul>
             </div>
-            
+
             <div>
               <h3 className="font-semibold mb-3">Informasi</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -155,7 +190,7 @@ const Layout = ({ children }: LayoutProps) => {
                 <li><a href="#" className="hover:text-foreground">Syarat & Ketentuan</a></li>
               </ul>
             </div>
-            
+
             <div>
               <h3 className="font-semibold mb-3">Kontak</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
@@ -165,7 +200,7 @@ const Layout = ({ children }: LayoutProps) => {
               </ul>
             </div>
           </div>
-          
+
           <div className="border-t pt-6 mt-6 text-center text-sm text-muted-foreground">
             <p>&copy; 2024 KankerCare. Semua hak cipta dilindungi.</p>
           </div>
