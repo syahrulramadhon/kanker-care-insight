@@ -1,0 +1,72 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "path": "/patients"
+      },
+      "name": "Firebase Trigger",
+      "type": "n8n-nodes-base.firebaseRealtimeDatabaseTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "credentials": {
+        "firebaseRealtimeDatabase": {
+          "id": "your-firebase-credential-id"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "Full Name", "value": "={{$json[\"fullName\"]}}" },
+            { "name": "Age", "value": "={{$json[\"age\"]}}" },
+            { "name": "Gender", "value": "={{$json[\"gender\"]}}" },
+            { "name": "Phone", "value": "={{$json[\"phone\"]}}" },
+            { "name": "Email", "value": "={{$json[\"email\"]}}" },
+            { "name": "Cancer Type", "value": "={{$json[\"cancerType\"]}}" },
+            { "name": "Stage", "value": "={{$json[\"stage\"]}}" },
+            { "name": "Diagnosis Date", "value": "={{$json[\"diagnosisDate\"]}}" },
+            { "name": "Symptoms", "value": "={{$json[\"symptoms\"].join(\", \")}}" },
+            { "name": "Other Symptoms", "value": "={{$json[\"otherSymptoms\"]}}" },
+            { "name": "Family History", "value": "={{$json[\"familyHistory\"]}}" },
+            { "name": "Allergies", "value": "={{$json[\"allergies\"]}}" },
+            { "name": "Previous Treatment", "value": "={{$json[\"previousTreatment\"]}}" },
+            { "name": "CA125", "value": "={{$json[\"labResults\"][\"ca125\"]}}" },
+            { "name": "PSA", "value": "={{$json[\"labResults\"][\"psa\"]}}" },
+            { "name": "CEA", "value": "={{$json[\"labResults\"][\"cea\"]}}" },
+            { "name": "Other Lab", "value": "={{$json[\"labResults\"][\"other\"]}}" }
+          ]
+        }
+      },
+      "name": "Set Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "sheetId": "your-google-sheet-id",
+        "range": "DataPasien!A2",
+        "options": { "valueInputMode": "USER_ENTERED" }
+      },
+      "name": "Add to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 3,
+      "position": [750, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "your-google-sheets-credential-id"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Firebase Trigger": {
+      "main": [[{ "node": "Set Data", "type": "main", "index": 0 }]]
+    },
+    "Set Data": {
+      "main": [[{ "node": "Add to Google Sheets", "type": "main", "index": 0 }]]
+    }
+  }
+}
